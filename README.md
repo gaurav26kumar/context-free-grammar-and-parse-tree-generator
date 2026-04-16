@@ -1,86 +1,77 @@
 CFG Lab — Context-Free Grammar Visualizer
 
-An interactive learning platform for understanding Context-Free Grammars (CFGs) through visualizations, derivations, and hands-on experimentation.
+An interactive web-based platform to learn and experiment with Context-Free Grammars (CFGs) through visualizations, derivations, and hands-on tools.
 
-live demo-https://cfg-and-parsetreegenerator.netlify.app/
+🔗 Live Demo: https://cfglab.netlify.app/
 
 📌 Overview
 
-CFG Lab is a browser-based tool designed to help students and learners deeply understand formal language theory concepts such as:
+CFG Lab is designed to help students and learners build a strong intuition for formal language theory. It combines clear theoretical explanations with interactive visual tools to make complex concepts easier to understand.
 
+Topics Covered:
 Grammar definitions
-Derivations (leftmost & rightmost)
+Leftmost & rightmost derivations
 Parse trees
-Ambiguity
+Ambiguity in grammars
 Chomsky Normal Form (CNF)
 Real-world applications
-
-It combines theory + interactivity to make complex concepts intuitive.
-
 ✨ Features
 🎯 Core Learning Modules
-📖 Step-by-step explanation of CFG concepts
+📖 Step-by-step explanations of CFG concepts
 🧠 Formal definitions with examples
-📊 Structured course layout (7 chapters)
+📊 Structured learning across 7 chapters
 ⚡ Interactive Tools
 🔄 Derivation Animator
-Visualize leftmost/rightmost derivations
-Input your own grammar and strings
+Visualize leftmost and rightmost derivations
+Input your own grammar and test strings
 🌳 Parse Tree Builder
-Generate parse trees dynamically
-Supports custom grammars
+Dynamically generate parse trees
+Works with custom grammars
 ⚠️ Ambiguity Visualizer
-Compare multiple parse trees for same string
+Compare multiple parse trees for the same string
+Identify ambiguous grammars easily
 🧪 Custom Grammar Support
-Write your own grammar rules
-Test strings against them
-Experiment freely
+Define your own grammar rules
+Experiment with different inputs
 🛠️ Tech Stack
 HTML5
-CSS3 (Modern UI + Animations)
+CSS3 (Modern UI & animations)
 Vanilla JavaScript
 Canvas API (for tree visualization)
 📂 Project Structure
-📁 cfg-lab/
- ├── index.html   # Main application (UI + logic)
- └── README.md    # Project documentation
+cfg-lab/
+├── index.html      # Main application (UI + logic)
+└── README.md       # Project documentation
 🚀 Getting Started
-1. Clone the repository
+1. Clone the Repository
 git clone https://github.com/your-username/cfg-lab.git
-2. Open the project
+2. Open the Project
+Simply open index.html in your browser
 
-Simply open index.html in your browser.
+✅ No installation required
 
-No installation required ✅
-
-
- Learning Outcomes
+🎯 Learning Outcomes
 
 After using this tool, you will be able to:
 
 Understand CFG structure: G = (V, Σ, R, S)
 Perform derivations step-by-step
-Visualize parse trees
-Identify ambiguous grammars
-Convert grammars to CNF
-📸 Screenshots (Optional)
+Visualize and interpret parse trees
 
-Add screenshots here after deployment
-
- Contributing
+🤝 Contributing
 
 Contributions are welcome!
 
-You can:
+You can help by:
 
-Improve UI/UX
-Add more grammar examples
-Optimize parsing logic
-Add new visualizations
- License
+Improving UI/UX
+Adding more grammar examples
+Optimizing parsing logic
+Building new visualization features
+📄 License
 
 This project is open-source and available under the MIT License.
 
- Author
+👨‍💻 Author
 
 Gaurav Kumar
