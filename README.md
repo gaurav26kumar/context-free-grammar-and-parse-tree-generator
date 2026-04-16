@@ -2,7 +2,7 @@ CFG Lab — Context-Free Grammar Visualizer
 
 An interactive web-based platform to learn and experiment with Context-Free Grammars (CFGs) through visualizations, derivations, and hands-on tools.
 
-🔗 Live Demo: https://cfg-and-parsetreegenerator.netlify.app/
+🔗 Live Demo: https://cfglab.netlify.app/
 
 📌 Overview
 
