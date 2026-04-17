@@ -1084,16 +1084,61 @@ footer {
 .fade-in { opacity: 0; transform: translateY(20px); transition: opacity 0.5s, transform 0.5s; }
 .fade-in.visible { opacity: 1; transform: translateY(0); }
 
+/* ========================
+   BACKGROUND CANVAS
+   ======================== */
+#bg-canvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 1;
+}
+
+/* ========================
+   GEN CURSOR
+   ======================== */
+#gen-cursor {
+  position: fixed;
+  top: 0; left: 0;
+  pointer-events: none;
+  z-index: 9999;
+}
+.cursor-dot {
+  position: fixed;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 12px 4px rgba(56,189,248,0.7), 0 0 30px 10px rgba(56,189,248,0.25);
+  pointer-events: none;
+  z-index: 10000;
+  transform: translate(-50%, -50%);
+  transition: background 0.3s;
+  mix-blend-mode: screen;
+}
+[data-theme="light"] .cursor-dot {
+  background: #0284c7;
+  box-shadow: 0 0 12px 4px rgba(2,132,199,0.55), 0 0 30px 10px rgba(2,132,199,0.18);
+}
+
 @media(max-width: 768px) { 
   nav { padding: 0 20px; } 
   .nav-links { display: none; } 
   .hero-stats { gap: 28px; }
   .theme-toggle span { display: none; }
+  #gen-cursor, .cursor-dot { display: none; }
 }
 </style>
 </head>
 <body>
 <div class="noise"></div>
+<!-- Interactive background constellation -->
+<canvas id="bg-canvas"></canvas>
+<!-- Generative cursor trail -->
+<canvas id="gen-cursor"></canvas>
+<div class="cursor-dot" id="cursorDot"></div>
 
 <nav>
   <div class="nav-left">
@@ -1442,19 +1487,20 @@ function updateThemeUI(theme) {
 }
 
 function redrawCanvases() {
-  // Redraw tree canvas if exists
-  if (currentTreeData) {
-    const { tree, grammar } = currentTreeData;
-    const canvas = document.getElementById('treeCanvas');
-    canvas.width = canvas.offsetWidth;
-    computeLayout(tree, 0, 30, canvas.width - 30, canvas);
-    drawTreeFull(canvas, tree, grammar);
-  }
-  // Clear derivation steps area background
-  const derivSteps = document.getElementById('derivSteps');
-  if (derivSteps) {
-    derivSteps.style.background = 'var(--bg3)';
-  }
+  // Redraw tree canvas if exists — use rAF to ensure CSS vars are resolved after theme attr set
+  requestAnimationFrame(() => {
+    if (currentTreeData) {
+      const { tree, grammar } = currentTreeData;
+      const canvas = document.getElementById('treeCanvas');
+      canvas.width = canvas.offsetWidth;
+      computeLayout(tree, 0, 30, canvas.width - 30, canvas);
+      drawTreeFull(canvas, tree, grammar);
+    } else {
+      // Even with no tree, repaint the blank canvas with new theme bg
+      clearTreeCanvas();
+    }
+    // Derivation steps background is CSS-driven, nothing to do
+  });
 }
 
 // Initialize theme on load
@@ -1958,6 +2004,7 @@ function drawTreeFull(canvas, treeRoot, grammar) {
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
+  // Force re-read of theme colors on every full draw
   const bgColor = getCanvasBgColor();
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, W, H);
@@ -2108,6 +2155,270 @@ function drawNodesAnim(ctx, node, grammar) {
   ctx.fillText(label, node.x, node.y);
   if (node.children) node.children.forEach(c => drawNodesAnim(ctx, c, grammar));
 }
+
+// ========================
+// INTERACTIVE BACKGROUND CONSTELLATION
+// ========================
+(function initBgConstellation() {
+  const canvas = document.getElementById('bg-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  let W, H;
+  let mouse = { x: -9999, y: -9999 };
+  const PARTICLE_COUNT = 88;
+  const CONNECT_DIST  = 160; // max px between connected nodes
+  const MOUSE_REPEL   = 120; // repulsion radius
+  const MOUSE_REPEL_F = 0.018; // repulsion force strength
+  const FLOAT_SPEED   = 0.28;
+  let particles = [];
+  let bgRaf;
+
+  // ---- helpers --------------------------------------------------------
+  function isDarkTheme() { return getTheme() === 'dark'; }
+
+  function themeColors() {
+    return isDarkTheme()
+      ? { node: 'rgba(56,189,248,', edge: '56,189,248', glow: '56,189,248', accent: '167,139,250' }
+      : { node: 'rgba(2,132,199,',  edge: '2,132,199',  glow: '2,132,199',  accent: '124,58,237' };
+  }
+
+  // ---- init particles -------------------------------------------------
+  function initParticles() {
+    particles = [];
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = FLOAT_SPEED * (0.3 + Math.random() * 0.7);
+      particles.push({
+        x:  Math.random() * W,
+        y:  Math.random() * H,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        r:  1.2 + Math.random() * 1.6,
+        // oscillation for gentle floating
+        ox: Math.random() * Math.PI * 2,
+        oy: Math.random() * Math.PI * 2,
+        wobble: 0.0006 + Math.random() * 0.001,
+        // per-particle variety
+        hueShift: Math.random() < 0.2 ? 'accent' : 'node',
+      });
+    }
+  }
+
+  // ---- resize ---------------------------------------------------------
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    if (particles.length === 0) initParticles();
+  }
+
+  resize();
+  window.addEventListener('resize', () => { resize(); });
+
+  // ---- mouse tracking -------------------------------------------------
+  window.addEventListener('mousemove', e => {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+  });
+  window.addEventListener('mouseleave', () => {
+    mouse.x = -9999; mouse.y = -9999;
+  });
+
+  // ---- draw -----------------------------------------------------------
+  function tick(ts) {
+    ctx.clearRect(0, 0, W, H);
+    const colors = themeColors();
+    const t = ts * 0.001;
+
+    // --- soft cursor glow beneath everything ---
+    if (mouse.x > 0) {
+      const gr = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 220);
+      const alpha = isDarkTheme() ? 0.07 : 0.05;
+      gr.addColorStop(0,   `rgba(${colors.glow},${alpha})`);
+      gr.addColorStop(0.5, `rgba(${colors.glow},${alpha * 0.4})`);
+      gr.addColorStop(1,   'transparent');
+      ctx.fillStyle = gr;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // --- update & draw particles -----------------------------------------
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+
+      // gentle sine wobble
+      p.ox += p.wobble;
+      p.oy += p.wobble * 0.7;
+      p.x += p.vx + Math.sin(p.ox + t) * 0.12;
+      p.y += p.vy + Math.cos(p.oy + t) * 0.12;
+
+      // wrap around edges
+      if (p.x < -20)  p.x = W + 20;
+      if (p.x > W+20) p.x = -20;
+      if (p.y < -20)  p.y = H + 20;
+      if (p.y > H+20) p.y = -20;
+
+      // cursor repulsion
+      const dx = p.x - mouse.x;
+      const dy = p.y - mouse.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < MOUSE_REPEL && dist > 0) {
+        const force = (1 - dist / MOUSE_REPEL) * MOUSE_REPEL_F;
+        p.vx += (dx / dist) * force;
+        p.vy += (dy / dist) * force;
+      }
+
+      // velocity damping
+      p.vx *= 0.985;
+      p.vy *= 0.985;
+
+      // draw node
+      const isAccent = p.hueShift === 'accent';
+      const nodeAlpha = isDarkTheme() ? 0.55 : 0.45;
+      const nodeColor = isAccent
+        ? `rgba(${colors.accent},${nodeAlpha})`
+        : `${colors.node}${nodeAlpha})`;
+
+      // glow halo
+      const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 5);
+      halo.addColorStop(0,   nodeColor);
+      halo.addColorStop(1,   'transparent');
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 5, 0, Math.PI * 2);
+      ctx.fillStyle = halo;
+      ctx.fill();
+
+      // solid core
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      const solidAlpha = isDarkTheme() ? 0.80 : 0.65;
+      ctx.fillStyle = isAccent
+        ? `rgba(${colors.accent},${solidAlpha})`
+        : `${colors.node}${solidAlpha})`;
+      ctx.fill();
+    }
+
+    // --- draw edges -------------------------------------------------------
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const a = particles[i], b = particles[j];
+        const dx = a.x - b.x, dy = a.y - b.y;
+        const d  = Math.sqrt(dx * dx + dy * dy);
+        if (d > CONNECT_DIST) continue;
+
+        // brightness fades with distance
+        let alpha = (1 - d / CONNECT_DIST) * (isDarkTheme() ? 0.18 : 0.14);
+
+        // brighten edges near cursor
+        const mda = Math.sqrt((a.x - mouse.x) ** 2 + (a.y - mouse.y) ** 2);
+        const mdb = Math.sqrt((b.x - mouse.x) ** 2 + (b.y - mouse.y) ** 2);
+        const nearCursor = Math.min(mda, mdb);
+        if (nearCursor < 200) {
+          alpha += (1 - nearCursor / 200) * (isDarkTheme() ? 0.45 : 0.32);
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle = `rgba(${colors.edge},${Math.min(alpha, isDarkTheme() ? 0.6 : 0.48)})`;
+        ctx.lineWidth = nearCursor < 200 ? 1.0 : 0.5;
+        ctx.stroke();
+      }
+    }
+
+    bgRaf = requestAnimationFrame(tick);
+  }
+
+  bgRaf = requestAnimationFrame(tick);
+})();
+
+// ========================
+// GENERATIVE CURSOR ANIMATION
+// ========================
+(function initGenCursor() {
+  const canvas = document.getElementById('gen-cursor');
+  const dot = document.getElementById('cursorDot');
+  if (!canvas || !dot) return;
+
+  const ctx = canvas.getContext('2d');
+  let W = window.innerWidth, H = window.innerHeight;
+  let mx = W / 2, my = H / 2;
+  let particles = [];
+  let raf;
+
+  function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W;
+    canvas.height = H;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  window.addEventListener('mousemove', (e) => {
+    mx = e.clientX;
+    my = e.clientY;
+    dot.style.left = mx + 'px';
+    dot.style.top = my + 'px';
+
+    // Spawn particles on move
+    const isDark = getTheme() === 'dark';
+    for (let i = 0; i < 2; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.4 + Math.random() * 1.2;
+      const hue = isDark
+        ? (180 + Math.random() * 60)   // cyan-blue range
+        : (200 + Math.random() * 30);   // steel-blue range
+      const saturation = isDark ? '90%' : '75%';
+      const lightness = isDark ? '65%' : '45%';
+      particles.push({
+        x: mx,
+        y: my,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1,
+        decay: 0.03 + Math.random() * 0.04,
+        radius: 2 + Math.random() * 3,
+        color: `hsl(${hue}, ${saturation}, ${lightness})`,
+        glow: isDark ? 0.5 : 0.35,
+      });
+    }
+  });
+
+  function tick() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Update and draw particles
+    particles = particles.filter(p => p.life > 0);
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.02; // slight gravity
+      p.vx *= 0.97;
+      p.life -= p.decay;
+
+      const a = Math.max(0, p.life);
+      const r = p.radius * a;
+
+      // Glow
+      const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 3);
+      grd.addColorStop(0, p.color.replace('hsl', 'hsla').replace(')', `, ${a * p.glow})`));
+      grd.addColorStop(1, 'transparent');
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r * 3, 0, Math.PI * 2);
+      ctx.fillStyle = grd;
+      ctx.fill();
+
+      // Core dot
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color.replace('hsl', 'hsla').replace(')', `, ${a}`);
+      ctx.fill();
+    }
+
+    raf = requestAnimationFrame(tick);
+  }
+  tick();
+})();
 
 // ========================
 // INIT
